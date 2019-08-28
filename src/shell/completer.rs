@@ -8,6 +8,8 @@ crate struct NuCompleter {
     pub commands: CommandRegistry,
 }
 
+const FALLBACK_QUOTE: char = '"';
+
 impl NuCompleter {
     pub fn complete(
         &self,
@@ -33,15 +35,31 @@ impl NuCompleter {
             _ => None,
         });
 
-        if let Some(quote_type) = starting_quote {
-            for completion in &mut completions {
-                if completion.replacement.contains("\\ ") {
-                    completion.replacement = completion.replacement.replace("\\ ", " ");
+        for completion in &mut completions {
+            // Remove backslashes if the completion contains '\ ' or '\(',
+            // and set the starting_quote, which will insert a quote at the
+            // beginning (but not the end) of the completion.
+            // TODO: if backslashes are fully supported in paths in the future,
+            // skip this step, and just pass through the backslashes.
+            let needs_quote =
+                completion.replacement.contains("\\ ") || completion.replacement.contains("\\(");
+            if needs_quote {
+                completion.replacement = completion
+                    .replacement
+                    .replace("\\ ", " ")
+                    .replace("\\(", "(");
+            }
+            let starting_quote = starting_quote.or_else(|| {
+                if needs_quote {
+                    Some(FALLBACK_QUOTE)
+                } else {
+                    None
                 }
-                if completion.replacement.contains("\\(") {
-                    completion.replacement = completion.replacement.replace("\\(", "(");
-                }
-
+            });
+            // If the completion is to be quoted, add a quote at the start of
+            // the completion. Adding a quote at the end prevents easy chain
+            // completion.
+            if let Some(quote_type) = starting_quote {
                 if !completion.replacement.starts_with(quote_type) {
                     completion.replacement = format!("{}{}", quote_type, completion.replacement);
                 }
