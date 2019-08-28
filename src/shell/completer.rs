@@ -17,33 +17,32 @@ impl NuCompleter {
     ) -> rustyline::Result<(usize, Vec<rustyline::completion::Pair>)> {
         let commands: Vec<String> = self.commands.names();
 
-        let mut completions = self.file_completer.complete(line, pos, context)?.1;
-
-        for completion in &mut completions {
-            if completion.replacement.contains("\\ ") {
-                completion.replacement = completion.replacement.replace("\\ ", " ");
-            }
-            if completion.replacement.contains("\\(") {
-                completion.replacement = completion.replacement.replace("\\(", "(");
-            }
-
-            if completion.replacement.contains(" ") || completion.replacement.contains("(") {
-                if !completion.replacement.starts_with("\"") {
-                    completion.replacement = format!("\"{}", completion.replacement);
-                }
-                if !completion.replacement.ends_with("\"") {
-                    completion.replacement = format!("{}\"", completion.replacement);
-                }
-            }
-        }
+        let (mut replace_pos, mut completions) =
+            self.file_completer.complete(line, pos, context)?;
 
         let line_chars: Vec<_> = line.chars().collect();
-        let mut replace_pos = pos;
         while replace_pos > 0 {
             if line_chars[replace_pos - 1] == ' ' {
                 break;
             }
             replace_pos -= 1;
+        }
+
+        let starts_with_quote = line_chars.get(replace_pos).map_or(false, |&v| v == '"');
+
+        if starts_with_quote {
+            for completion in &mut completions {
+                if completion.replacement.contains("\\ ") {
+                    completion.replacement = completion.replacement.replace("\\ ", " ");
+                }
+                if completion.replacement.contains("\\(") {
+                    completion.replacement = completion.replacement.replace("\\(", "(");
+                }
+
+                if !completion.replacement.starts_with("\"") {
+                    completion.replacement = format!("\"{}", completion.replacement);
+                }
+            }
         }
 
         for command in commands.iter() {
