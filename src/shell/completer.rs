@@ -28,9 +28,12 @@ impl NuCompleter {
             replace_pos -= 1;
         }
 
-        let starts_with_quote = line_chars.get(replace_pos).map_or(false, |&v| v == '"');
+        let starting_quote = line_chars.get(replace_pos).map_or(None, |&v| match v {
+            '"' | '\'' => Some(v),
+            _ => None,
+        });
 
-        if starts_with_quote {
+        if let Some(quote_type) = starting_quote {
             for completion in &mut completions {
                 if completion.replacement.contains("\\ ") {
                     completion.replacement = completion.replacement.replace("\\ ", " ");
@@ -39,8 +42,8 @@ impl NuCompleter {
                     completion.replacement = completion.replacement.replace("\\(", "(");
                 }
 
-                if !completion.replacement.starts_with("\"") {
-                    completion.replacement = format!("\"{}", completion.replacement);
+                if !completion.replacement.starts_with(quote_type) {
+                    completion.replacement = format!("{}{}", quote_type, completion.replacement);
                 }
             }
         }
