@@ -18,7 +18,6 @@ const ESCAPE_CHAR: Option<char> = Some('\\');
 #[cfg(windows)]
 const ESCAPE_CHAR: Option<char> = None;
 
-
 impl NuCompleter {
     pub fn complete(
         &self,
@@ -39,10 +38,7 @@ impl NuCompleter {
             replace_pos -= 1;
         }
 
-        let orig_starting_quote = line_chars.get(replace_pos).map_or(None, |&v| match v {
-            '"' | '\'' => Some(v),
-            _ => None,
-        });
+        let orig_starting_quote = line_chars.get(replace_pos).map_or(None, Quote::from);
 
         for completion in &mut completions {
             // Remove backslashes if the completion contains '\ ' or '\(' or '\\'
@@ -54,8 +50,9 @@ impl NuCompleter {
             let starting_quote = orig_starting_quote.or_else(|| {
                 if completion.replacement.contains("\\ ")
                     || completion.replacement.contains("\\(")
-                    || completion.replacement.contains("\\\\") {
-                    Some(FALLBACK_QUOTE)
+                    || completion.replacement.contains("\\\\")
+                {
+                    Some(Quote::Double)
                 } else {
                     None
                 }
@@ -65,10 +62,11 @@ impl NuCompleter {
             // completion.
             if let Some(quote_type) = starting_quote {
                 completion.replacement = match orig_starting_quote {
-                    Some('\'') => completion.replacement.clone(),
-                    Some('"') => unescape(&completion.replacement, DOUBLE_QUOTES_ESCAPE_CHAR).to_string(),
+                    Some(Quote::Single) => completion.replacement.clone(),
+                    Some(Quote::Double) => {
+                        unescape(&completion.replacement, DOUBLE_QUOTES_ESCAPE_CHAR).to_string()
+                    }
                     None => unescape(&completion.replacement, ESCAPE_CHAR).to_string(),
-                    _ => unreachable!(),
                 };
                 if !completion.replacement.starts_with(quote_type) {
                     completion.replacement = format!("{}{}", quote_type, completion.replacement);
@@ -108,3 +106,22 @@ impl NuCompleter {
     //     line.replace(start..end, elected)
     // }
 }
+
+enum Quote {
+    Single,
+    Double,
+}
+
+impl From<&char> for Option<Quote> {
+    fn from(c: &char) -> Self {
+        match c {
+            '"' => Some(Quote::Double),
+            '\'' => Some(Quote::Single),
+            _ => None,
+        }
+    }
+}
+
+// fn unescape(quote Quote, matches: Vec<Pair>) {
+
+// }
