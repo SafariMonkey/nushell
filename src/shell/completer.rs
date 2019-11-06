@@ -1,6 +1,6 @@
 use crate::prelude::*;
 use derive_new::new;
-use rustyline::completion::{Completer, FilenameCompleter};
+use rustyline::completion::{unescape, Completer, FilenameCompleter};
 
 #[derive(new)]
 crate struct NuCompleter {
@@ -9,6 +9,15 @@ crate struct NuCompleter {
 }
 
 const FALLBACK_QUOTE: char = '"';
+
+const DOUBLE_QUOTES_ESCAPE_CHAR: Option<char> = Some('\\');
+
+// Not exported from rusty_line, but needed for unescaping.
+#[cfg(unix)]
+const ESCAPE_CHAR: Option<char> = Some('\\');
+#[cfg(windows)]
+const ESCAPE_CHAR: Option<char> = None;
+
 
 impl NuCompleter {
     pub fn complete(
@@ -30,27 +39,22 @@ impl NuCompleter {
             replace_pos -= 1;
         }
 
-        let starting_quote = line_chars.get(replace_pos).map_or(None, |&v| match v {
+        let orig_starting_quote = line_chars.get(replace_pos).map_or(None, |&v| match v {
             '"' | '\'' => Some(v),
             _ => None,
         });
 
         for completion in &mut completions {
-            // Remove backslashes if the completion contains '\ ' or '\(',
-            // and set the starting_quote, which will insert a quote at the
-            // beginning (but not the end) of the completion.
+            // Remove backslashes if the completion contains '\ ' or '\(' or '\\'
+            // (and we're not already completing something quoting with "'"),
+            // and set the starting_quote, which will insert a double quote at
+            // the beginning (but not the end) of the completion.
             // TODO: if backslashes are fully supported in paths in the future,
             // skip this step, and just pass through the backslashes.
-            let needs_quote =
-                completion.replacement.contains("\\ ") || completion.replacement.contains("\\(");
-            if needs_quote {
-                completion.replacement = completion
-                    .replacement
-                    .replace("\\ ", " ")
-                    .replace("\\(", "(");
-            }
-            let starting_quote = starting_quote.or_else(|| {
-                if needs_quote {
+            let starting_quote = orig_starting_quote.or_else(|| {
+                if completion.replacement.contains("\\ ")
+                    || completion.replacement.contains("\\(")
+                    || completion.replacement.contains("\\\\") {
                     Some(FALLBACK_QUOTE)
                 } else {
                     None
@@ -60,6 +64,12 @@ impl NuCompleter {
             // the completion. Adding a quote at the end prevents easy chain
             // completion.
             if let Some(quote_type) = starting_quote {
+                completion.replacement = match orig_starting_quote {
+                    Some('\'') => completion.replacement.clone(),
+                    Some('"') => unescape(&completion.replacement, DOUBLE_QUOTES_ESCAPE_CHAR).to_string(),
+                    None => unescape(&completion.replacement, ESCAPE_CHAR).to_string(),
+                    _ => unreachable!(),
+                };
                 if !completion.replacement.starts_with(quote_type) {
                     completion.replacement = format!("{}{}", quote_type, completion.replacement);
                 }
